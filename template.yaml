@@ -2945,23 +2945,44 @@ Resources:
                   - iam:PassRole
                 # Scoped to BatchOperationsRole only — least-privilege (Req 8.3).
                 Resource: !GetAtt BatchOperationsRole.Arn
-                # Restricts this grant to handing the role to Batch Operations and
-                # nothing else, matching the pattern already used on
+                # Restricts this grant to handing the role to S3 and nothing else,
+                # matching the pattern already used on
                 # S3TableIntegrationSetupRole's PassRole for logs.amazonaws.com.
+                #
+                # The value is 's3.amazonaws.com', NOT
+                # 'batchoperations.s3.amazonaws.com'. Those are two different
+                # things and conflating them is the obvious mistake here:
+                # batchoperations.s3.amazonaws.com is the principal in
+                # BatchOperationsRole's *trust* policy (the service that assumes
+                # the role), whereas iam:PassedToService carries the service the
+                # role is being passed *to* on the s3control CreateJob call, which
+                # IAM populates as s3.amazonaws.com.
+                #
+                # Measured 2026-09-09 against a real deployed stack, not inferred.
+                # With 'batchoperations.s3.amazonaws.com' every run withheld with
+                # AccessDenied "no identity-based policy allows the iam:PassRole
+                # action" and no job could ever be created, in report-only or
+                # active mode. Alternating the two values across four consecutive
+                # runs of the same real run_id gave AUTHORIZED / DENIED /
+                # AUTHORIZED / DENIED, which rules out IAM propagation lag as the
+                # explanation. 'StringLike: *' was authorized and
+                # 'Null: true' was denied, so the key is genuinely populated --
+                # the earlier revision's claim that IAM always populates it was
+                # correct; the value it assumed was not. 's3control.amazonaws.com'
+                # was also denied.
+                #
+                # Defence in depth: BatchOperationsRole's trust policy already
+                # admits only batchoperations.s3.amazonaws.com, so passing it
+                # elsewhere would fail at AssumeRole anyway.
                 #
                 # Note the contrast with the BatchOperationsRole *trust* policy,
                 # which deliberately carries no Condition: there, the service is not
                 # documented as populating aws:SourceArn/aws:SourceAccount, so a
                 # Condition on an absent context key would evaluate false and deny
-                # sts:AssumeRole at run time. iam:PassedToService is different --
-                # IAM itself populates it on every PassRole request, so this cannot
-                # fail closed. Defence in depth: BatchOperationsRole's trust policy
-                # already admits only batchoperations.s3.amazonaws.com, so passing it
-                # elsewhere would fail at AssumeRole anyway. This removes the
-                # dependence on that trust policy staying as it is.
+                # sts:AssumeRole at run time.
                 Condition:
                   StringEquals:
-                    'iam:PassedToService': 'batchoperations.s3.amazonaws.com'
+                    'iam:PassedToService': 's3.amazonaws.com'
         - PolicyName: S3ManifestAccess
           PolicyDocument:
             Version: '2012-10-17'
