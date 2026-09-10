@@ -165,12 +165,6 @@ Releasing an event hold does not delete anything — it sets a fixed retain-unti
 
 Set `NoncurrentDays` to at least your `EventHoldDuration` and comfortably longer than your `DetectionSchedule` cadence. See [Lifecycle integration](OPERATIONS.md#lifecycle-integration) in `OPERATIONS.md` for a worked example and why a short `NoncurrentDays` can work against `delete` mode.
 
-## Notices
-
-Customers are responsible for making their own independent assessment of the information in this repository. This solution: (a) is for informational purposes only, (b) represents current product offerings and practices, which are subject to change without notice, and (c) does not create any commitments or assurances from AWS and its affiliates, suppliers, or licensors. AWS products or services are provided "as is" without warranties, representations, or conditions of any kind, whether express or implied.
-
-This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
-
 ## Authors
 
 * Ed Gummett, Senior Storage Specialist Solutions Architect, AWS. [Connect on LinkedIn.](https://www.linkedin.com/in/egummett/)
