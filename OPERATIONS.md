@@ -146,7 +146,7 @@ Releasing an event hold does not delete versions — it sets a fixed retain-unti
 How the two pieces compose:
 
 1. This solution releases the event hold on noncurrent versions, setting `retain-until-date = MAX(existing, release time + EventHoldDuration)`.
-2. Your `NoncurrentVersionExpiration` rule expires (permanently deletes) a noncurrent version once it has been noncurrent longer than `NoncurrentDays` **and** its retain-until-date has passed. Both conditions must be true — the rule does not delete a version on `NoncurrentDays` alone if the retain-until-date is still in the future. S3 enforces Object Lock retention regardless of lifecycle rules.
+2. Your `NoncurrentVersionExpiration` rule expires (permanently deletes) a noncurrent version once it has been noncurrent longer than `NoncurrentDays` **and** its retain-until-date has passed. Both conditions must be true, but they are enforced by different mechanisms: lifecycle acts on `NoncurrentDays` and Object Lock refuses the delete while the retain-until-date is in the future. A version passed over that way is not skipped permanently; lifecycle re-evaluates it on each later daily pass and the delete succeeds once retention has lapsed. S3 enforces Object Lock retention regardless of lifecycle rules.
 
 **Example: add a NoncurrentVersionExpiration rule via the AWS CLI.**
 
@@ -162,6 +162,9 @@ cat > tmp/lifecycle.json << 'EOF'
       },
       "NoncurrentVersionExpiration": {
         "NoncurrentDays": 30
+      },
+      "Expiration": {
+        "ExpiredObjectDeleteMarker": true
       }
     }
   ]
@@ -175,10 +178,19 @@ aws s3api put-bucket-lifecycle-configuration \
   --lifecycle-configuration file://tmp/lifecycle.json
 ```
 
-**Choosing `NoncurrentDays`.** Set it to at least your `EventHoldDuration`, and comfortably longer than your `DetectionSchedule` cadence plus inventory delivery lag. Two reasons:
+`ExpiredObjectDeleteMarker` is in the same rule deliberately. Under `delete` mode the steady state on a deleted key is a held noncurrent data version with a delete marker as the current version above it; once lifecycle finally expires that data version the marker is left behind with nothing under it, and without this action those markers accumulate for every key the pipeline ever processes. They cost no storage but they inflate `ListObjectVersions` responses and subsequent inventories. Note that `ExpiredObjectDeleteMarker` cannot be combined with `Expiration.Days`, `Expiration.Date`, or a tag filter in the same rule; if you also expire current versions, that needs a second rule.
 
-1. A larger value costs nothing in practice for held versions — lifecycle cannot permanently delete a version before its retain-until-date regardless of `NoncurrentDays`.
-2. A short `NoncurrentDays` can work against `delete` mode. **Delete markers never carry an event hold and have no retain-until-date, so the rule removes noncurrent delete markers on the `NoncurrentDays` schedule alone** — independent of any hold defaults or anything this solution does. If a delete marker is cleaned up before the pipeline has released the data version it superseded, that version's immediate superseder changes, which can reclassify a `delete`-mode candidate as overwrite-superseded and leave it un-released. (The same property is what makes a withheld tie involving a delete marker [self-healing](CLASSIFYING-VERSIONS.md#whether-a-withheld-candidate-stays-stuck).)
+**Choosing `NoncurrentDays`.** Two bounds matter, and any value between them behaves the same.
+
+*Lower bound: longer than one detection cycle.* Set it comfortably above your `DetectionSchedule` cadence plus inventory delivery lag, so the pipeline reliably reaches a version before lifecycle acts on anything around it. The specific hazard is the delete-marker case below.
+
+*Upper bound: below `EventHoldDuration` plus your release lag.* Lifecycle deletes a released version at `MAX(became_noncurrent + NoncurrentDays, retain-until-date)`, and after release the retain-until-date is `release_time + EventHoldDuration`, where `release_time` is necessarily later than `became_noncurrent`. While `NoncurrentDays` stays below `EventHoldDuration` plus the release lag, the retain-until-date is the binding constraint and the exact value of `NoncurrentDays` makes no difference to when the version goes away. That is the sense in which a larger value is free, and it stops being true past the crossover: above it `NoncurrentDays` becomes the binding constraint and you keep paying storage on versions whose retention has already lapsed, which is the cost this solution exists to remove.
+
+**Where a short value works against `delete` mode.** Delete markers never carry an event hold and have no retain-until-date, so the rule removes a **noncurrent** delete marker on the `NoncurrentDays` schedule alone, independent of any hold defaults or anything this solution does. That only reaches a `delete`-mode candidate on a key that was deleted and later written again, the `v1 → delete marker → v2 (current)` shape, because only there is the delete marker itself noncurrent. If the marker ages out before the pipeline has released `v1`, then `v1`'s immediate superseder becomes `v2`, it reclassifies as overwrite-superseded, and `delete` mode stops selecting it.
+
+On a key that was deleted and left deleted, the delete marker is the *current* version and no lifecycle action removes it: `NoncurrentVersionExpiration` does not apply to current versions, and the marker is not an [expired object delete marker](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-configuration-examples.html) while a noncurrent version still sits beneath it. The ordinary `delete`-mode candidate is not exposed to this at all.
+
+**The same mechanism cuts both ways.** Noncurrent-delete-marker expiry is also what clears a withheld timestamp tie without manual work, so the two goals pull `NoncurrentDays` in opposite directions: a short value helps tie resolution, a long one protects the release path. Set it for the release path. A withheld tie is reported every run and can wait, whereas a reclassified candidate silently stops being eligible. See [whether a withheld candidate stays stuck](CLASSIFYING-VERSIONS.md#whether-a-withheld-candidate-stays-stuck).
 
 ## Operating at scale
 

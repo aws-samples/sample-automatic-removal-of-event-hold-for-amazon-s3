@@ -163,7 +163,7 @@ Two controls gate every release, both detailed in [OPERATIONS.md](OPERATIONS.md)
 
 Releasing an event hold does not delete anything — it sets a fixed retain-until-date. To actually remove versions you need a `NoncurrentVersionExpiration` lifecycle rule on the Target_Bucket, which this solution does not create or modify. The rule deletes a noncurrent version once it has been noncurrent longer than `NoncurrentDays` **and** its retain-until-date has passed; S3 enforces Object Lock retention regardless of lifecycle configuration.
 
-Set `NoncurrentDays` to at least your `EventHoldDuration` and comfortably longer than your `DetectionSchedule` cadence. See [Lifecycle integration](OPERATIONS.md#lifecycle-integration) in `OPERATIONS.md` for a worked example and why a short `NoncurrentDays` can work against `delete` mode.
+Set `NoncurrentDays` comfortably longer than your `DetectionSchedule` cadence plus inventory delivery lag, and below `EventHoldDuration` plus that same release lag. Inside that range the retain-until-date governs when a version goes away and the exact value makes no difference; above it, `NoncurrentDays` becomes the binding constraint and you pay storage on versions whose retention has already lapsed. Pair the rule with `ExpiredObjectDeleteMarker` so the delete markers left above expired versions get cleaned up too. See [Lifecycle integration](OPERATIONS.md#lifecycle-integration) in `OPERATIONS.md` for a worked example and for the one case where a short `NoncurrentDays` can work against `delete` mode.
 
 ## Authors
 

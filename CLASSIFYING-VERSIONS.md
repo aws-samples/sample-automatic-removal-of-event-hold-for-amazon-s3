@@ -38,9 +38,10 @@ Both lock modes are covered in the one listing. This is purely informational —
 
 ## Whether a withheld candidate stays stuck
 
-`LastModifiedDate` on an existing version never changes, so a tie only clears when one of the tied versions is removed. Two cases:
+`LastModifiedDate` on an existing version never changes, so a tie only clears when one of the tied versions is removed. Three cases:
 
-- **Tie involving a delete marker — self-heals.** A delete marker can never carry an event hold, so a `NoncurrentVersionExpiration` lifecycle rule removes a noncurrent delete marker on its `NoncurrentDays` schedule regardless of this solution. Once the delete marker is gone, the surviving data version's superseder set becomes unanimous on a later inventory run and it is classified and released automatically. No manual action needed — just time.
+- **Tie involving a *noncurrent* delete marker — self-heals.** A delete marker can never carry an event hold, so a `NoncurrentVersionExpiration` lifecycle rule removes a noncurrent delete marker on its `NoncurrentDays` schedule regardless of this solution. Once the delete marker is gone, the surviving data version's superseder set becomes unanimous on a later inventory run and it is classified and released automatically. No manual action needed, just time.
+- **Tie where the delete marker is the *current* version — stuck.** Whether the marker is noncurrent depends on the key's topology, and if it sits at the top of the version stack nothing ages it out: `NoncurrentVersionExpiration` does not apply to current versions, and the marker is not an [expired object delete marker](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-configuration-examples.html) while the tied data versions are still there. Treat this the same as the two-data-version case below. You can tell the two apart from the version listing for the key: if the delete marker is the latest version, the tie will not clear on its own.
 - **Tie between two held data versions — genuinely stuck.** Both versions keep their holds (neither can be classified), nothing ages out, and the pair keeps appearing in the diagnostic every run. Clearing it is a manual step: release the holds yourself and let the lifecycle rule delete the versions after their retention elapses. There's no automated remediation for this case.
 
 ## Classification is per-hop, not per-history
