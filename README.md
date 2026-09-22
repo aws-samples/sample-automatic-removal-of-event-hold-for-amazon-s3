@@ -8,7 +8,8 @@ Deeper detail lives alongside this file: [architecture](ARCHITECTURE.md) · [ver
 
 ## Overview
 
-This solution builds on **Amazon S3 Object Lock Variable Retention with Event Holds** (see [S3 Object Lock](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html) in the *Amazon S3 User Guide*). An event hold is an indefinite object lock with a configured `EventHoldDuration`: while the hold is active the object is WORM-protected and its retain-until-date is dynamic, so every `GetObjectRetention` call returns at least `now + EventHoldDuration`.
+This solution builds on **Amazon S3 Object Lock Variable Retention with Event Holds** (see [S3 Object Lock](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html) in the *Amazon S3 User Guide* and the launch blog [Flexibly control Amazon S3 Object Lock retention based on real business events
+](https://aws.amazon.com/blogs/storage/flexibly-control-amazon-s3-object-lock-retention-based-on-real-business-events/) for details). An event hold is an indefinite object lock with a configured `EventHoldDuration`: while the hold is active the object is WORM-protected and its retain-until-date is dynamic, so every `GetObjectRetention` call returns at least `now + EventHoldDuration`.
 
 Versions that have been superseded (deleted or overwritten) typically do not need indefinite protection. This solution automates releasing the hold once a version becomes noncurrent. You choose which class of superseded versions qualifies via the [release mode](#release-modes).
 
