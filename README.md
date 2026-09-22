@@ -1,14 +1,5 @@
 # Automatic event hold release for Amazon S3 Object Lock
 
-
-### THIS SOLUTION HAS BEEN SUPERSEDED BY THE LAUNCH OF VARIABLE RETENTION WITH EVENT HOLD
-See the launch blog [Flexibly control Amazon S3 Object Lock retention based on real business events
-](https://aws.amazon.com/blogs/storage/flexibly-control-amazon-s3-object-lock-retention-based-on-real-business-events/) for details.
-
-There will be no further updates to this sample code.
-
----
-
 > **Disclaimer:** Code is provided as-is, to demonstrate a concept or workflow to AWS customers. You should ensure it meets your requirements, and carefully review the eligibility manifests before running them against non-test data.
 
 Automatically releases the S3 Object Lock **event hold** on noncurrent object versions so the post-event retention countdown begins and a `NoncurrentVersionExpiration` lifecycle rule can eventually delete them.
